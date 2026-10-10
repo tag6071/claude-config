@@ -1,0 +1,18 @@
+# Project-specific production identifiers — one regex per line.
+# Loaded by ~/.claude/hooks/block-prod.py and matched case-insensitively
+# against any Bash command Claude tries to run. A match = hard block.
+#
+# Lines starting with '#' and blank lines are ignored.
+# Regex syntax: Python `re` module. Use \b for word boundaries.
+#
+# Examples (uncomment and edit for your real prod):
+#   api\.myapp\.com
+#   prod-db\.internal
+#   my-prod-project-123456                   # GCP project id
+#   arn:aws:[a-z0-9-]+:123456789012:         # AWS account id in ARNs
+#   AKIA[0-9A-Z]{16}                         # any AWS access key id
+#   supabase\.co/project/abcd1234            # specific Supabase project ref
+#   vercel\.app/_/your-prod-team             # specific Vercel team
+#
+# Add yours below:
+

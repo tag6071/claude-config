@@ -1,0 +1,11 @@
+[pack]
+name = "rust"
+version = "1"
+description = "Rust anti-patterns."
+
+applies_when = "rust"
+detect_globs = ["Cargo.toml"]
+
+[[checks]]
+file     = "unwrap_in_nontest.sh"
+severity = "warn"

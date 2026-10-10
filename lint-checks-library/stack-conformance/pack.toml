@@ -1,0 +1,86 @@
+[pack]
+name = "stack-conformance"
+version = "1"
+description = "Enforce the settled tech stack: Vite+Bun+React (rhf+zod, TanStack, react-router) frontend, Go stdlib net/http + sqlc+pgx backend. Each check self-gates by file presence, so installing this pack on a non-matching repo is a no-op."
+
+# Apply everywhere — each check no-ops when its target files are absent
+# (a Go-only repo skips the JS checks; a JS-only repo skips the Go checks).
+applies_when = "always"
+
+# --- Frontend (no-op unless package.json present) ---
+[[checks]]
+file     = "no_alien_lockfile.sh"      # npm/yarn/pnpm lock → Bun only
+severity = "fail"
+
+[[checks]]
+file     = "frontend_framework.sh"     # next/sveltekit/CRA → Vite only
+severity = "fail"
+
+[[checks]]
+file     = "forms_competing_lib.sh"    # formik/final-form/redux-form → rhf+zod
+severity = "fail"
+
+[[checks]]
+file     = "forms_use_rhf.sh"          # <form> without react-hook-form → AppForm
+severity = "fail"
+
+[[checks]]
+file     = "no_inline_styles.sh"       # style={{}} / <style> CSS-in-JS → Tailwind
+severity = "fail"
+
+[[checks]]
+file     = "no_raw_colors.sh"          # raw hex/rgb/hsl outside token files → tokens
+severity = "fail"
+
+[[checks]]
+file     = "design_system_primitives.sh"  # native <select>/custom modal → shadcn (a11y)
+severity = "fail"
+
+[[checks]]
+file     = "single_token_source.sh"    # >1 theme mechanism / token source → one
+severity = "fail"
+
+[[checks]]
+file     = "no_arbitrary_dimensions.sh"  # text-[13px]/p-[13px]/font-size:NNpx → scale
+severity = "fail"
+
+[[checks]]
+file     = "a11y_lint_enabled.sh"      # Biome a11y rules disabled → re-enable
+severity = "fail"
+
+[[checks]]
+file     = "no_handrolled_css.sh"      # bespoke .css beyond global sheet → Tailwind
+severity = "fail"
+
+[[checks]]
+file     = "design_system_components.sh"  # raw button/input/textarea → shadcn
+severity = "fail"
+
+[[checks]]
+file     = "frontend_libs.sh"          # missing TanStack Query / react-router
+severity = "fail"
+
+[[checks]]
+file     = "no_mock_server.sh"         # second mock server/port → one server / MSW
+severity = "fail"
+
+[[checks]]
+file     = "playwright_browsers_path.sh"  # `playwright install` without a fixed browsers path
+severity = "warn"
+
+[[checks]]
+file     = "edge_labels.sh"            # containerized web app missing caddy edge labels
+severity = "warn"
+
+# --- Backend (no-op unless go.mod present) ---
+[[checks]]
+file     = "backend_stdlib_http.sh"    # gin/echo/fiber/chi/gorilla → stdlib net/http
+severity = "fail"
+
+[[checks]]
+file     = "forms_server_validation.sh"  # handler reads body without validating → 400-guard
+severity = "fail"
+
+[[checks]]
+file     = "backend_db_pgx.sh"         # gorm/lib-pq/go-sql-driver → sqlc+pgx
+severity = "fail"

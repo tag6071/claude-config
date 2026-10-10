@@ -1,0 +1,12 @@
+[pack]
+name = "shell"
+version = "1"
+description = "Shell-script hygiene."
+
+# Applies if scripts/ exists OR there are *.sh / *.bash files at root.
+applies_when = "shell"
+detect_globs = ["scripts/*.sh", "scripts/*.bash", "*.sh", "*.bash", "bin/*"]
+
+[[checks]]
+file     = "set_pipefail_required.sh"
+severity = "fail"

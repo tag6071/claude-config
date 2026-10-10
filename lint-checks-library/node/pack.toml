@@ -1,0 +1,11 @@
+[pack]
+name = "node"
+version = "1"
+description = "Node / JS / TS anti-patterns."
+
+applies_when = "node"
+detect_globs = ["package.json"]
+
+[[checks]]
+file     = "no_console_log_production.sh"
+severity = "warn"

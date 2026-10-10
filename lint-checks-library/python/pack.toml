@@ -1,0 +1,20 @@
+[pack]
+name = "python"
+version = "1"
+description = "Python anti-patterns. Subprocess wrapper discipline, no asserts in production, etc."
+
+# Applies if pyproject.toml OR any *.py at root or under common src dirs.
+applies_when = "python"
+detect_globs = ["pyproject.toml", "setup.py", "*.py", "src/**/*.py", "tools/*.py"]
+
+[[checks]]
+file     = "subprocess_wrapper.py"
+severity = "fail"
+
+[[checks]]
+file     = "assert_in_production.sh"
+severity = "warn"
+
+[[checks]]
+file     = "print_in_production.sh"
+severity = "warn"

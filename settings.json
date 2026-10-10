@@ -1,0 +1,157 @@
+{
+  "cleanupPeriodDays": 3650,
+  "attribution": {
+    "commit": "",
+    "pr": ""
+  },
+  "model": "opus[1m]",
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Edit|Write|MultiEdit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "$HOME/.claude/hooks/commit-nudger.sh",
+            "timeout": 5
+          },
+          {
+            "type": "command",
+            "command": "$HOME/.claude/hooks/frontend-guard.py",
+            "timeout": 8,
+            "statusMessage": "Frontend-guard: checking edited UI file against the stack…"
+          },
+          {
+            "type": "command",
+            "command": "$HOME/.claude/hooks/dead-end-guard.py",
+            "timeout": 8,
+            "statusMessage": "Dead-end guard: checking user-facing messages name their next step…"
+          }
+        ]
+      }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": "Task|Agent",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "$HOME/.claude/hooks/delegate-gate.py",
+            "timeout": 5,
+            "statusMessage": "Delegate-gate: blocking blind hand-off of write-work…"
+          }
+        ]
+      },
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "$HOME/.claude/hooks/bash-guard.py",
+            "timeout": 10
+          }
+        ]
+      },
+      {
+        "matcher": "Read",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "$HOME/.claude/hooks/block-secrets.py",
+            "timeout": 5,
+            "statusMessage": "Checking for sensitive file / credential patterns…"
+          }
+        ]
+      },
+      {
+        "matcher": "Write|Edit|MultiEdit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "$HOME/.claude/hooks/doc-guard.py",
+            "timeout": 5,
+            "statusMessage": "Doc-guard: fold check + clickable-ref check…"
+          },
+          {
+            "type": "command",
+            "command": "$HOME/.claude/hooks/block-secrets.py",
+            "timeout": 5,
+            "statusMessage": "Checking for sensitive file / credential patterns…"
+          },
+          {
+            "type": "command",
+            "command": "$HOME/.claude/hooks/launchd-name-guard.py"
+          }
+        ]
+      }
+    ],
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "$HOME/.claude/hooks/session-checklist.sh",
+            "timeout": 5
+          },
+          {
+            "type": "command",
+            "command": "$HOME/.claude/hooks/session-context.sh",
+            "timeout": 5
+          },
+          {
+            "type": "command",
+            "command": "$HOME/.claude/hooks/repo-maturity-check.sh",
+            "timeout": 5
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "$HOME/.claude/hooks/end-of-session-check.sh",
+            "timeout": 5
+          },
+          {
+            "type": "command",
+            "command": "$HOME/.claude/hooks/persist-gate.py",
+            "timeout": 10,
+            "statusMessage": "Persist gate: checking for manual-step handoff…"
+          },
+          {
+            "type": "command",
+            "command": "$HOME/.claude/hooks/terse-gate.py",
+            "timeout": 10,
+            "statusMessage": "Terse gate: checking output length…"
+          }
+        ]
+      }
+    ],
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "$HOME/.claude/hooks/rule-cards.py",
+            "timeout": 5
+          }
+        ]
+      }
+    ]
+  },
+  "statusLine": {
+    "type": "command",
+    "command": "$HOME/.claude/statusline.py"
+  },
+  "enabledPlugins": {
+    "frontend-design@claude-plugins-official": true,
+    "gopls-lsp@claude-plugins-official": true
+  },
+  "outputStyle": "terse",
+  "skipWorkflowUsageWarning": true,
+  "theme": "auto",
+  "agentPushNotifEnabled": true,
+  "skipAutoPermissionPrompt": true
+}

@@ -1,0 +1,36 @@
+[pack]
+name = "universal"
+version = "1"
+description = "Stack-agnostic checks. Apply to every project."
+
+# Applicability: always (no condition).
+applies_when = "always"
+
+# Check files in this pack. Each entry:
+#   file:     path within this pack dir
+#   severity: "fail" (blocks commit) or "warn" (prints, continues)
+#   needs:    optional — skip the check if a required file is absent
+[[checks]]
+file     = "no_escape_comments.sh"   # the lock: bans all self-granted *-OK bypass comments
+severity = "fail"
+
+[[checks]]
+file     = "file_growth.sh"
+severity = "fail"
+
+[[checks]]
+file     = "section_markers.py"
+severity = "fail"
+
+[[checks]]
+file     = "codemap_drift.py"
+severity = "warn"
+needs    = "docs/CODE_MAP.md"
+
+[[checks]]
+file     = "no_ls_in_pipelines.sh"
+severity = "fail"
+
+[[checks]]
+file     = "todo_without_ref.sh"
+severity = "warn"

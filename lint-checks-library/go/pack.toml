@@ -1,0 +1,23 @@
+[pack]
+name = "go"
+version = "2"
+description = "Go anti-patterns."
+
+applies_when = "go"
+detect_globs = ["go.mod"]
+
+[[checks]]
+file     = "golangci_lint.sh"           # the blessed Go linter (errcheck/staticcheck/…)
+severity = "warn"                        # flip to fail once .golangci.yml is tuned + clean
+
+[[checks]]
+file     = "gofmt_clean.sh"              # tracked .go files must match gofmt; fix is `gofmt -w .`
+severity = "fail"
+
+[[checks]]
+file     = "unchecked_errors.sh"         # regex fallback — defers to golangci-lint when installed
+severity = "warn"
+
+[[checks]]
+file     = "no_init_funcs.sh"
+severity = "warn"

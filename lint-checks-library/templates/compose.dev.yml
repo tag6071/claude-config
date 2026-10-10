@@ -1,0 +1,74 @@
+# compose.dev.yml — FAST dev loop (HMR) served THROUGH the edge, one URL.
+#
+# Why this exists: on a locked-down / single-entry box (homeserver = :443 only) a raw
+# vite dev port is unreachable from the browser, and rebuilding the prod image
+# per change is slow. This runs `vite dev` (HMR) in a thin container with the
+# SOURCE BIND-MOUNTED — edits hot-reload instantly, NO image rebuild — and
+# carries the SAME caddy label as prod, so it serves at https://<app>.home.arpa.
+#
+# Usage (mutually exclusive with prod — both claim the same hostname):
+#   docker compose -f compose.dev.yml up      # DEV: HMR through the edge
+#   docker compose down && docker compose up -d --build   # SHIP: prod build
+#
+# Placeholders to fill per app:
+#   {{APP}}      app / caddy hostname stem (e.g. myapp)
+#   {{WEBDIR}}   path to the frontend dir (e.g. ui/web, web, app, dashboard, .)
+#   {{DEVPORT}}  vite dev port (any free port; only the edge reaches it)
+#   {{BACKEND}}  the backend service block if the app has one (else delete api +
+#                its depends_on, and drop the /api proxy)
+#
+# REQUIRED vite.config change (HMR through a TLS reverse proxy):
+#   server: { host: true, allowedHosts: ['.home.arpa'],
+#             hmr: { clientPort: 443, protocol: 'wss' },
+#             proxy: { '/api': 'http://api:{{BACKENDPORT}}' } }
+# Without allowedHosts, vite 5+ rejects the <app>.home.arpa Host header.
+
+services:
+  # --- backend (delete this whole block if the app is frontend-only) ---------
+  api:
+    build: .
+    image: {{APP}}:latest
+    restart: unless-stopped
+    environment:
+      DATABASE_URL: postgres://{{APP}}:{{APP}}@db:5432/{{APP}}?sslmode=disable
+    depends_on:
+      db: { condition: service_healthy }
+    # no caddy label — internal; the web-dev container proxies /api to it.
+
+  db:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: {{APP}}
+      POSTGRES_PASSWORD: {{APP}}
+      POSTGRES_DB: {{APP}}
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U {{APP}}"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  # --- vite dev server with HMR, source bind-mounted, served via the edge ----
+  web-dev:
+    image: oven/bun:1-alpine
+    working_dir: /app/{{WEBDIR}}  # run vite from the web dir…
+    command: sh -c "bun install && bun run dev --host 0.0.0.0 --port {{DEVPORT}}"
+    environment:
+      VITE_MOCKS: "1"            # dev/mocks; unset for plain dev
+    volumes:
+      - .:/app                   # …but mount the REPO ROOT — web often @imports
+                                 # ../sibling files (e.g. ui/design-tokens.css)
+                                 # that live outside the web dir (mirrors the
+                                 # prod Dockerfile's COPY layout). HMR, no rebuilds.
+      - /app/{{WEBDIR}}/node_modules  # keep container's node_modules
+    ports:
+      - "127.0.0.1:{{DEVPORT}}:{{DEVPORT}}"   # loopback only — edge reaches it
+    labels:
+      caddy: {{APP}}.home.arpa
+      caddy.tls: internal
+      caddy.import_0: accesslog
+      caddy.import_1: sso
+      caddy.reverse_proxy: 127.0.0.1:{{DEVPORT}}
+
+volumes:
+  {{APP}}-pgdata:

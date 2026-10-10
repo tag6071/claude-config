@@ -1,0 +1,23 @@
+[pack]
+name = "playwright"
+version = "1"
+description = "Anti-flake patterns for Playwright-based test suites."
+
+# Applies if any of these conditions hold:
+#   - tests/package.json or package.json depends on @playwright/test
+#   - any *.spec.mjs file exists under tests/
+applies_when = "playwright"
+detect_globs = ["tests/package.json", "package.json", "tests/*.spec.mjs"]
+detect_substring = "@playwright/test"
+
+[[checks]]
+file     = "no_wait_timeout.sh"
+severity = "fail"
+
+[[checks]]
+file     = "no_split_assert.py"
+severity = "fail"
+
+[[checks]]
+file     = "race_comments.py"
+severity = "warn"

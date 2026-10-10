@@ -1,0 +1,13 @@
+# Allowlisted git identities. One value per line (name OR email), '#' comments ok.
+# git-identity-guard.py BLOCKS any command that sets, overrides, or injects a git
+# author/committer identity whose value is not listed here.
+#
+# Why this file exists: a Claude Code session once committed 27 times under the user's personal
+# email by passing `-c user.email=...` on the command line. That leaves NO trace in gitconfig or the environment, so no config
+# setting can prevent it — only a guard that reads the command itself.
+#
+# Matching is case-insensitive and exact (not substring). To authorize another
+# identity (e.g. a client repo), add its name and email here on their own lines.
+
+your-git-user
+12345678+your-github@users.noreply.github.com

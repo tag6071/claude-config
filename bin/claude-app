@@ -1,0 +1,105 @@
+#!/usr/bin/env bash
+# claude-app: manage a single dev server per project with auto-restart support.
+#
+# Subcommands:
+#   start "<cmd>"   kill any tracked app for $PWD, start cmd detached, save state
+#   stop            kill the tracked app, remove state
+#   restart         re-run the saved command
+#   maybe-restart   silent no-op if no state; otherwise restart (with 2s debounce)
+#   status          print state + alive flag
+#
+# State: ~/.claude/app-state/<cwd-hash>.json   {pid, command, cwd, started}
+# Logs:  /tmp/claude-app-<cwd-hash>.log
+
+set -euo pipefail
+
+STATE_DIR="${HOME}/.claude/app-state"
+mkdir -p "$STATE_DIR"
+
+cwd_hash() {
+  if command -v sha256sum >/dev/null 2>&1; then
+    printf '%s' "$PWD" | sha256sum | cut -d' ' -f1 | head -c 16
+  else
+    printf '%s' "$PWD" | shasum -a 256 | cut -d' ' -f1 | head -c 16
+  fi
+}
+
+state_file() { echo "$STATE_DIR/$(cwd_hash).json"; }
+log_file()   { echo "/tmp/claude-app-$(cwd_hash).log"; }
+stamp_file() { echo "/tmp/claude-app-$(cwd_hash).stamp"; }
+
+kill_pid() {
+  local pid="$1"
+  [ -z "$pid" ] && return 0
+  kill -0 "$pid" 2>/dev/null || return 0
+  pkill -P "$pid" 2>/dev/null || true
+  kill "$pid" 2>/dev/null || true
+  sleep 0.2
+  kill -0 "$pid" 2>/dev/null && kill -9 "$pid" 2>/dev/null || true
+  return 0
+}
+
+start_cmd() {
+  local command="$1"
+  stop_tracked
+
+  nohup bash -c "$command" >"$(log_file)" 2>&1 &
+  local pid=$!
+
+  jq -n \
+    --argjson pid "$pid" \
+    --arg command "$command" \
+    --arg cwd "$PWD" \
+    --argjson started "$(date +%s)" \
+    '{pid:$pid, command:$command, cwd:$cwd, started:$started}' \
+    > "$(state_file)"
+
+  date +%s > "$(stamp_file)"
+  echo "started: $command (pid $pid, log $(log_file))"
+}
+
+stop_tracked() {
+  local sf; sf="$(state_file)"
+  [ -f "$sf" ] || return 0
+  local pid; pid=$(jq -r .pid "$sf" 2>/dev/null || echo "")
+  kill_pid "$pid"
+  rm -f "$sf" "$(stamp_file)"
+}
+
+restart_tracked() {
+  local sf; sf="$(state_file)"
+  [ -f "$sf" ] || { echo "no app tracked for $PWD" >&2; return 1; }
+  local command; command=$(jq -r .command "$sf")
+  start_cmd "$command"
+}
+
+maybe_restart() {
+  local sf; sf="$(state_file)"
+  [ -f "$sf" ] || return 0
+
+  local last now
+  last=$(cat "$(stamp_file)" 2>/dev/null || echo 0)
+  now=$(date +%s)
+  [ $((now - last)) -lt 2 ] && return 0
+
+  restart_tracked >/dev/null 2>&1 || true
+  jq -r .command "$sf"
+}
+
+show_status() {
+  local sf; sf="$(state_file)"
+  [ -f "$sf" ] || { echo "no app tracked for $PWD"; return 0; }
+  local pid alive
+  pid=$(jq -r .pid "$sf")
+  if kill -0 "$pid" 2>/dev/null; then alive="alive"; else alive="dead"; fi
+  jq --arg alive "$alive" '. + {alive:$alive}' "$sf"
+}
+
+case "${1:-}" in
+  start)         start_cmd "${2:?usage: claude-app start \"<command>\"}" ;;
+  stop)          stop_tracked && echo "stopped" ;;
+  restart)       restart_tracked ;;
+  maybe-restart) maybe_restart ;;
+  status)        show_status ;;
+  *)             echo "usage: claude-app {start \"<cmd>\"|stop|restart|maybe-restart|status}" >&2; exit 1 ;;
+esac

@@ -1,0 +1,303 @@
+#!/usr/bin/env bash
+# wt — ergonomic git worktrees for parallel Claude Code sessions.
+#
+# Two Claude sessions in the SAME checkout fight over .claude/PLAN.md, .claude/3Q.md
+# and the shared git index. A worktree gives each session its own working dir + index
+# + .claude/ while sharing one .git object store. This wraps the create/teardown so
+# it's one command — and it handles git-crypt (a plain `git worktree add` fails to
+# decrypt because the new worktree can't see the shared unlock key).
+#
+# Global tool: works in any repo on any machine. No deps beyond git + macOS builtins.
+set -euo pipefail
+
+PROG=${0##*/}
+
+die() {
+	printf '%s: %s\n' "$PROG" "$*" >&2
+	exit 1
+}
+info() { printf '%s\n' "$*" >&2; }
+
+usage() {
+	cat >&2 <<EOF
+$PROG — isolated git worktrees for parallel Claude sessions (git-crypt aware)
+
+USAGE
+  $PROG [name] [base] [PLACE]
+                        create worktree <repo>-<name> on branch wt/<name>, then open
+                        'claude' in it. no name -> next free slot (2,3,4…). base
+                        defaults to HEAD.
+  $PROG -p [name] [base] create but DON'T open; print + copy the 'cd … && claude' line.
+                        (what Claude uses on your behalf — it must not spawn windows.)
+  $PROG ls              list worktrees
+  $PROG rm <name> [-f]  remove worktree + its wt/<name> branch (refuses if dirty/unmerged)
+  $PROG merge <name>    merge wt/<name> into the current branch, then rm
+  $PROG prune           after a manual folder delete: drop stale regs + orphaned wt/* branches
+  $PROG -h              this help
+
+PLACE (iTerm) — where the new session opens. default = \$WT_OPEN, else vsplit.
+  --tab       new tab (⌘T)
+  --vsplit    split side-by-side (⌘D)      (alias: --pane) [default]
+  --hsplit    split stacked (⌘⇧D)
+  --window    new window
+  Set a permanent default in your shell rc:  export WT_OPEN=vsplit
+
+EXAMPLES
+  $PROG feature           # new isolated feature session, opens a side-by-side split
+  $PROG feature --tab     # … in a new tab instead
+  $PROG                   # next numbered slot
+  $PROG merge feature     # land it back on the hub and clean up
+EOF
+}
+
+# --- repo context (resolves to the MAIN worktree even when run from a linked one) ---
+git rev-parse --is-inside-work-tree >/dev/null 2>&1 || die "not inside a git repository"
+COMMON_DIR=$(git rev-parse --git-common-dir)
+COMMON_DIR=$(cd "$COMMON_DIR" && pwd)
+REPO_ROOT=$(dirname "$COMMON_DIR")
+REPONAME=$(basename "$REPO_ROOT")
+PARENT=$(dirname "$REPO_ROOT")
+
+branch_exists() { git show-ref --verify --quiet "refs/heads/$1"; }
+
+# accept either the short name (feature) or the full folder name (myrepo-feature, trailing / ok)
+norm_name() {
+	local n=${1%/}
+	case "$n" in
+	"$REPONAME-"*) printf '%s' "${n#"$REPONAME"-}" ;;
+	*) printf '%s' "$n" ;;
+	esac
+}
+
+next_slot() {
+	local n=2
+	while [ -e "$PARENT/$REPONAME-$n" ] || branch_exists "wt/$n"; do
+		n=$((n + 1))
+	done
+	printf '%s' "$n"
+}
+
+# Open `claude` in the worktree. Placement: tab (default) | vsplit | hsplit | window.
+# iTerm: split vertically = side-by-side (⌘D); split horizontally = stacked (⌘⇧D).
+open_session() {
+	local path=$1 place=$2 prog=${TERM_PROGRAM:-}
+	local cmd="cd '$path' && claude"
+	case "$prog" in
+	iTerm.app)
+		case "$place" in
+		window)
+			osascript >/dev/null 2>&1 <<-OSA
+				tell application "iTerm"
+				  set w to (create window with default profile)
+				  tell current session of w to write text "$cmd"
+				end tell
+			OSA
+			info "✓ new iTerm window → claude"
+			;;
+		vsplit)
+			osascript >/dev/null 2>&1 <<-OSA
+				tell application "iTerm"
+				  tell current session of current window
+				    set s to (split vertically with default profile)
+				  end tell
+				  tell s to write text "$cmd"
+				end tell
+			OSA
+			info "✓ split iTerm pane (side-by-side) → claude"
+			;;
+		hsplit)
+			osascript >/dev/null 2>&1 <<-OSA
+				tell application "iTerm"
+				  tell current session of current window
+				    set s to (split horizontally with default profile)
+				  end tell
+				  tell s to write text "$cmd"
+				end tell
+			OSA
+			info "✓ split iTerm pane (stacked) → claude"
+			;;
+		*)
+			osascript >/dev/null 2>&1 <<-OSA
+				tell application "iTerm"
+				  tell current window to create tab with default profile
+				  tell current session of current window to write text "$cmd"
+				end tell
+			OSA
+			info "✓ new iTerm tab → claude"
+			;;
+		esac
+		;;
+	Apple_Terminal)
+		osascript >/dev/null 2>&1 \
+			-e "tell application \"Terminal\" to do script \"$cmd\""
+		info "✓ new Terminal window → claude (tabs/panes are iTerm-only here)"
+		;;
+	*)
+		info "unknown terminal ($prog) — run this (also on your clipboard):"
+		printf 'cd %s && claude\n' "$path"
+		;;
+	esac
+}
+
+wt_new() {
+	local name=$1 base=${2:-HEAD} open=$3 place=${4:-vsplit}
+	name=$(norm_name "$name")
+	[ -n "$name" ] || name=$(next_slot)
+	local branch="wt/$name" path="$PARENT/$REPONAME-$name"
+
+	[ -e "$path" ] && die "path already exists: $path"
+	branch_exists "$branch" && die "branch already exists: $branch (try: $PROG rm $name)"
+
+	if [ -d "$COMMON_DIR/git-crypt/keys" ]; then
+		info "git-crypt detected — create without checkout, link key, then checkout…"
+		git worktree add --no-checkout -b "$branch" "$path" "$base" >&2
+		local wtgit
+		wtgit=$(git -C "$path" rev-parse --absolute-git-dir)
+		ln -sfn "$COMMON_DIR/git-crypt" "$wtgit/git-crypt"
+		git -C "$path" checkout >&2
+	else
+		git worktree add -b "$branch" "$path" "$base" >&2
+	fi
+
+	# A clean tree proves checkout (and any git-crypt smudge) fully succeeded.
+	[ -z "$(git -C "$path" status --porcelain)" ] ||
+		die "tree not clean after checkout: $path — investigate before using"
+
+	info "✓ worktree ready: $path  (branch $branch)"
+
+	# open=2: print ONLY the path (the wt() shell function in bin/wt.zsh cd's the current pane into it)
+	if [ "$open" = 2 ]; then
+		printf '%s\n' "$path"
+		return 0
+	fi
+
+	local launch="cd $path && claude"
+	if printf '%s' "$launch" | pbcopy 2>/dev/null; then
+		info "  launch line copied to clipboard"
+	fi
+	if [ "$open" = 1 ]; then
+		open_session "$path" "$place"
+	else
+		printf '%s\n' "$launch"
+	fi
+}
+
+wt_rm() {
+	local name force=$2
+	name=$(norm_name "$1")
+	[ -n "$name" ] || die "usage: $PROG rm <name> [-f]"
+	local branch="wt/$name" path="$PARENT/$REPONAME-$name"
+	[ -e "$path" ] || die "no worktree at $path"
+	case "$PWD/" in "$path/"*) die "you're inside $path — cd to the hub first (e.g. 'z $REPONAME'), then retry" ;; esac
+
+	if [ "$force" = 1 ]; then
+		git worktree remove --force "$path"
+		git branch -D "$branch" 2>/dev/null || true
+	else
+		git worktree remove "$path" ||
+			die "worktree dirty — commit/discard there, or: $PROG rm $name -f"
+		git branch -d "$branch" 2>/dev/null ||
+			die "branch $branch has unmerged commits — merge it, or: $PROG rm $name -f"
+	fi
+	info "✓ removed worktree $path and branch $branch"
+}
+
+wt_merge() {
+	local name
+	name=$(norm_name "$1")
+	[ -n "$name" ] || die "usage: $PROG merge <name>"
+	local branch="wt/$name"
+	branch_exists "$branch" || die "no branch $branch"
+	[ -z "$(git status --porcelain)" ] || die "current tree dirty — commit/stash first"
+	git merge --no-ff "$branch"
+	info "✓ merged $branch into $(git symbolic-ref --short HEAD)"
+	wt_rm "$name" 0
+}
+
+# create (default verb). [name] [base] [-p] [--tab|--vsplit|--hsplit|--window]
+# default placement = $WT_OPEN (else tab). name/base are the positional args.
+new_cmd() {
+	local name="" base="HEAD" place="${WT_OPEN:-vsplit}" open=1 npos=0 a
+	for a in "$@"; do
+		case "$a" in
+		-p | --print) open=0 ;;
+		--path) open=2 ;; # print only the worktree path (used by the wt() shell function in bin/wt.zsh)
+		--tab) place=tab ;;
+		--pane | --vsplit) place=vsplit ;;
+		--hsplit) place=hsplit ;;
+		--window) place=window ;;
+		-*) die "unknown option: $a (try $PROG -h)" ;;
+		*)
+			case "$npos" in
+			0)
+				name=$a
+				npos=1
+				;;
+			1)
+				base=$a
+				npos=2
+				;;
+			*) die "too many arguments (try $PROG -h)" ;;
+			esac
+			;;
+		esac
+	done
+	wt_new "$name" "$base" "$open" "$place"
+}
+
+# prune stale worktree registrations (dirs deleted by hand) + orphaned wt/* branches.
+# merged branches are deleted; unmerged ones are KEPT and reported (no silent loss).
+wt_prune() {
+	local regs removed=0 kept=0 live ref name
+	regs=$(git worktree prune -v 2>&1 || true)
+	if [ -n "$regs" ]; then printf '%s\n' "$regs" >&2; fi
+	live=$(git worktree list --porcelain | awk '/^branch /{print $2}')
+	while IFS= read -r ref; do
+		[ -n "$ref" ] || continue
+		if printf '%s\n' "$live" | grep -qxF "$ref"; then
+			continue
+		fi
+		name=${ref#refs/heads/}
+		if git branch -d "$name" 2>/dev/null; then
+			info "✓ pruned merged branch $name"
+			removed=$((removed + 1))
+		else
+			info "… kept $name (unmerged) — 'git branch -D $name' to force-delete"
+			kept=$((kept + 1))
+		fi
+	done <<-EOF
+		$(git for-each-ref --format='%(refname)' refs/heads/wt/)
+	EOF
+	if [ -z "$regs" ] && [ "$removed" = 0 ] && [ "$kept" = 0 ]; then
+		info "✓ nothing to prune — worktrees already clean"
+	else
+		info "✓ prune complete — $removed branch(es) removed, $kept kept"
+	fi
+}
+
+main() {
+	local sub=${1:-}
+	case "$sub" in
+	-h | --help) usage ;;
+	ls | list) git worktree list ;;
+	rm | remove)
+		shift
+		local force=0 name=""
+		for a in "$@"; do
+			case "$a" in
+			-f | --force) force=1 ;;
+			*) name=$a ;;
+			esac
+		done
+		wt_rm "$name" "$force"
+		;;
+	merge)
+		shift
+		wt_merge "${1:-}"
+		;;
+	prune) wt_prune ;;
+	*) new_cmd "$@" ;;
+	esac
+}
+
+main "$@"
