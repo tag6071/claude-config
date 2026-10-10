@@ -60,6 +60,16 @@ CASES = [
         2,
         "real TRUNCATE AFTER a heredoc must not be masked by the elision",
     ),
+    (
+        "echo '<div className=\"truncate rounded\">' > Card.tsx",
+        0,
+        "Tailwind truncate class (quote after the next word) is not SQL",
+    ),
+    (
+        "mysql -e \"TRUNCATE TABLE sessions\"",
+        2,
+        "TRUNCATE TABLE via mysql inside double quotes",
+    ),
     # --- unrelated commands sail through ---
     ("git status --short", 0, "hot path"),
     ("git commit -m 'ordinary message'", 0, "no verb anywhere"),

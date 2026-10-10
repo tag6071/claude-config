@@ -41,7 +41,10 @@ CASES = [
     ("real rgba in live code", ['const c = "rgba(0,0,0,.5)";'], HEX, True),
     ("url must not swallow a real violation on the same line",
      ['const l = "https://x.com"; const bad = "#ff0000";'], HEX, True),
-    ("inline style still caught", ["<div style={{ color: 'red' }} />"], INLINE, True),
+    ("inline style hardcoding a scale value still caught", ["<div style={{ padding: 12 }} />"], INLINE, True),
+    ("wrapped inline style object still caught", ["<div style={{", "  fontSize: 14,", "}} />"], INLINE, True),
+    # the inline rule flags hardcoded rhythm/type values only, not inline-ness
+    ("inline style without a scale value is legal", ["<div style={{ color: 'red' }} />"], INLINE, False),
     ("hex after a block comment closes", ["/* c */ const c = '#ff0000';"], HEX, True),
     # --- a URL alone is not a violation and not a comment ---
     ("bare url is untouched", ['const u = "https://x.com/a";'], HEX, False),
@@ -52,7 +55,8 @@ def main() -> int:
     failed = 0
     for name, lines, pat, want in CASES:
         blanked = fg.blank_comments(lines)
-        got = any(pat.search(ln) for ln in blanked)
+        # a rule is a compiled regex OR a callable(lines, idx) — call it the way the guard does
+        got = any(pat(blanked, i) if callable(pat) else pat.search(ln) for i, ln in enumerate(blanked))
         if got != want:
             print(f"FAIL {name}: want match={want}, got {got} — blanked={blanked!r}")
             failed += 1

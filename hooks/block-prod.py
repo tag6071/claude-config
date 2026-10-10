@@ -50,6 +50,9 @@ GENERIC_PATTERNS: list[tuple[str, str]] = [
     # SQL shape only: "TRUNCATE TABLE x" or "TRUNCATE x;" (or CASCADE/RESTART/end of line). The Tailwind
     # class "truncate border-2 ..." matched the old "TRUNCATE <word>" and blocked UI work.
     ("TRUNCATE", r"(?m)\bTRUNCATE\s+(TABLE\b|(ONLY\s+)?[\"\w.]+\s*(;|$|\bCASCADE\b|\bRESTART\b))"),
+    # Any TRUNCATE on the same line as a SQL client. `psql -c 'TRUNCATE users'` ends in a quote,
+    # which the SQL-shape rule above cannot see as a terminator without re-catching Tailwind classes.
+    ("TRUNCATE via SQL client", r"(?m)\b(psql|mysql|mariadb|sqlite3|duckdb|sqlcmd|cqlsh|clickhouse-client)\b[^\n]*\bTRUNCATE\s+(TABLE\s+)?(ONLY\s+)?[\"\w.]+"),
     ("DELETE FROM without WHERE", r"\bDELETE\s+FROM\s+\w[\w.\"]*\s*(;|$|--|\|)"),
     ("UPDATE without WHERE", r"\bUPDATE\s+\w[\w.\"]*\s+SET\s+[^;]*?(?<!\bWHERE)\s*(;|$)"),
 

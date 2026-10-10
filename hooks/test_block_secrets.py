@@ -164,7 +164,7 @@ def main() -> int:
 
     fails += e2e()
 
-    total = len(CASES) + 12
+    total = len(CASES) + 18
     if fails:
         print(f"\n{fails} FAILED")
         return 1
@@ -231,6 +231,24 @@ def e2e() -> int:
         if rc != 0:
             fails += 1
             print(f"FAIL  e2e git status: expected rc=0 got {rc}")
+
+        # Metadata-only queries never print bytes: allowed. Reading still blocks.
+        env = "." + "env"
+        for cmd, want in [
+            (f"git check-ignore -v {env} || echo not-ignored", 0),
+            (f"test -e {env} && echo present", 0),
+            (f"git ls-files | grep -c {env}", 2),           # grep segment still scanned
+            (f"git check-ignore {env} && cat {env}", 2),    # cat segment still blocks
+            (f"test -n \"$(cat {env})\"", 2),               # substitution reads the file
+            (f"stat {env} > out.txt", 2),                   # redirect = not metadata-only
+        ]:
+            rc = _run_hook(
+                "block-secrets.py",
+                {"tool_name": "Bash", "cwd": str(dp), "tool_input": {"command": cmd}},
+            )
+            if rc != want:
+                fails += 1
+                print(f"FAIL  e2e metadata-only {cmd!r}: expected rc={want} got {rc}")
     return fails
 
 

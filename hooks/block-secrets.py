@@ -162,7 +162,7 @@ def _assign_hits(text: str) -> int:
         1 for m in _ASSIGN.finditer(text) if not _CODEREF.match(m.group("value"))
     )
 
-SNIFF_EXEMPT_DIRS = (Path.home() / ".claude" / "hooks",)
+SNIFF_EXEMPT_DIRS = (Path(__file__).resolve().parent,)  # this hook's own dir, wherever installed
 SKIP_DIR_PARTS = {
     "node_modules", ".venv", "venv", "dist", "build", "target",
     ".next", "__pycache__", ".git",
@@ -285,6 +285,27 @@ def sniff_path(p: Path) -> list[str]:
     return []
 
 
+# Commands that only ask ABOUT a path (ignored? tracked? exists?) and never print its
+# bytes. `git check-ignore .env` was blocked as if it read the file. A segment that also
+# substitutes or redirects (`$(…)`, backtick, `<`, `>`) is never treated as metadata-only.
+_SEGMENT_SPLIT = re.compile(r"(&&|\|\||[;|\n])")
+_METADATA_ONLY = re.compile(
+    r"^\s*(?:\w+=\S*\s+)*"
+    r"(?:git\s+(?:-C\s+\S+\s+)?(?:check-ignore|ls-files|status)\b|test\s|\[\s|stat\s)"
+)
+_UNSAFE_IN_SEGMENT = re.compile(r"\$\(|`|[<>]")
+
+
+def elide_metadata_only(cmd: str) -> str:
+    """Blank pipeline segments that only query path metadata, before NAME scanning."""
+    parts = _SEGMENT_SPLIT.split(cmd)
+    for i in range(0, len(parts), 2):
+        seg = parts[i]
+        if _METADATA_ONLY.match(seg) and not _UNSAFE_IN_SEGMENT.search(seg):
+            parts[i] = " METADATA_ONLY "
+    return "".join(parts)
+
+
 def scan(target: str) -> list[str]:
     """Return list of human-readable match labels (empty = allowed)."""
     hits: list[str] = []
@@ -334,7 +355,7 @@ def main() -> int:
     # the prose is preserved, so a real `cat /etc/shadow` still gets caught.
     target_for_scan = elide_prose(target_for_scan)
 
-    hits = scan(target_for_scan)
+    hits = scan(elide_metadata_only(target_for_scan) if tool_name == "Bash" else target_for_scan)
 
     # Name patterns missed. Fall through to the content sniff — the file's bytes,
     # not its filename. Fails OPEN but LOUDLY: a guard that wedges every Bash call

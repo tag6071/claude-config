@@ -41,5 +41,3 @@ cd ~/.claude/hooks && for t in test_*.py; do python3 "$t" >/dev/null && echo "ok
 Some skills and rules assume a home-server setup: apps behind a Caddy edge at `https://<app>.home.arpa`, ops tasks in `rr` (pyproject-runner). Adapt or delete them.
 
 [bin/wt](bin/wt) is the worktree helper the `/worktree` skill uses. Put it on your `PATH`, and add `source ~/.claude/bin/wt.zsh` to `~/.zshrc` so `wt <name>` opens the worktree in the current pane.
-
-Known failing hook tests: `test_block_prod.py` (2 of 7 cases) and `test_frontend_guard.py` fail upstream too. Every other test passes.

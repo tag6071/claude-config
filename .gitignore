@@ -47,3 +47,8 @@ policy-limits.json
 policy-limits.json.stamp.json
 remote-settings.json
 state/
+
+# Local env files
+.env
+.env.*
+!.env.example
