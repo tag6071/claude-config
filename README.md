@@ -19,7 +19,7 @@ Everything expects to live at `~/.claude`. Back up yours first, then copy in onl
 
 ```bash
 cp -R ~/.claude ~/.claude.backup
-git clone <this-repo> /tmp/claude-config
+git clone https://github.com/tag6071/claude-config.git /tmp/claude-config
 cp -R /tmp/claude-config/{skills,hooks,lessons,agents,output-styles,lint-checks-library,playbook,bin} ~/.claude/
 cp /tmp/claude-config/statusline.py ~/.claude/
 ```
