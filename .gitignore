@@ -52,3 +52,6 @@ state/
 .env
 .env.*
 !.env.example
+
+# Project Claude layer + private guard data — local only, never published
+.claude/
