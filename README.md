@@ -1,5 +1,7 @@
 # claude-config
 
+> A snapshot from 12 October 2026. My live setup has moved on since; take ideas, not a current copy.
+
 My Claude Code setup: global instructions, skills, hooks, an agent, an output style, and a status line.
 
 | Path | What |
